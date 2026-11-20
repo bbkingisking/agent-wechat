@@ -34,7 +34,7 @@ jobs:
             openssl-devel gtk3-devel webkit2gtk4.1-devel libappindicator-gtk3-devel \
             librsvg2-devel dbus-devel pulseaudio-libs-devel \
             rpm-build cpio findutils tar gzip unzip xz python3 desktop-file-utils \
-            gnome-keyring libsecret dbus-daemon dbus-tools \
+            gnome-keyring libsecret dbus-daemon dbus-tools shadow-utils util-linux \
             xorg-x11-server-Xvfb python3-dbus python3-gobject
       - uses: actions/checkout@v7
       - name: Trust the runner-mounted checkout inside this container
@@ -106,11 +106,16 @@ jobs:
           WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
         run: |
           tray_test_root=$(mktemp -d)
+          useradd --create-home tray-test
           mkdir -m 700 "$tray_test_root/config" "$tray_test_root/data" "$tray_test_root/cache" "$tray_test_root/run"
-          env XDG_CONFIG_HOME="$tray_test_root/config" XDG_DATA_HOME="$tray_test_root/data" \
+          mkdir "$tray_test_root/tests"
+          cp packages/desktop/test/tray-attention.mjs packages/desktop/test/tray-watcher.py "$tray_test_root/tests/"
+          chown -R tray-test:tray-test "$tray_test_root"
+          runuser --user tray-test -- env XDG_CONFIG_HOME="$tray_test_root/config" XDG_DATA_HOME="$tray_test_root/data" \
             XDG_CACHE_HOME="$tray_test_root/cache" XDG_RUNTIME_DIR="$tray_test_root/run" \
-            dbus-run-session -- xvfb-run -a bash -c \
-            'printf "fixture-password\n" | gnome-keyring-daemon --unlock --components=secrets; node packages/desktop/test/tray-attention.mjs'
+            dbus-run-session -- xvfb-run -a bash -e -o pipefail -c \
+            'printf "fixture-password\n" | gnome-keyring-daemon --unlock --components=secrets; "$1" "$2"' \
+            tray-test "$(command -v node)" "$tray_test_root/tests/tray-attention.mjs"
       - name: Stage RPM, checksum and build identity
         env:
           SOURCE_COMMIT: ${{ github.sha }}
