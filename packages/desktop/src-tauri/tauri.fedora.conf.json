@@ -1,0 +1,20 @@
+{
+  "bundle": {
+    "targets": ["rpm"],
+    "linux": {
+      "rpm": {
+        "release": "1.fc45",
+        "depends": [
+          "gtk3",
+          "webkit2gtk4.1",
+          "libappindicator-gtk3",
+          "libsecret",
+          "dbus-libs",
+          "pulseaudio-libs",
+          "libgcc",
+          "glibc"
+        ]
+      }
+    }
+  }
+}

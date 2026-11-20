@@ -1,0 +1,110 @@
+name: Fedora ARM64 RPM
+
+# Personal fork builds only: no upstream release workflow or publishing secrets.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fedora-rpm-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  rpm:
+    name: Build and validate Fedora 45 ARM64 RPM
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    container: fedora:45
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_BUILD_JOBS: 3
+      CARGO_TERM_COLOR: always
+      TARGET: aarch64-unknown-linux-gnu
+    steps:
+      - name: Install build dependencies in the disposable container
+        run: |
+          dnf install -y git curl gcc gcc-c++ make cmake pkgconf-pkg-config \
+            perl-FindBin perl-IPC-Cmd perl-Text-Template perl-Time-Piece \
+            openssl-devel gtk3-devel webkit2gtk4.1-devel libappindicator-gtk3-devel \
+            librsvg2-devel dbus-devel pulseaudio-libs-devel \
+            rpm-build cpio findutils tar gzip unzip xz python3 desktop-file-utils
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.93.1
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: fedora45-arm64-rpm
+          workspaces: |
+            packages/native-client-rust -> target
+            packages/desktop/src-tauri -> target
+      - name: Install desktop workspace dependencies
+        run: pnpm install --frozen-lockfile --filter @agent-wechat/desktop...
+      - name: Check package metadata and build the shared SDK
+        run: |
+          pnpm --filter @agent-wechat/desktop build
+          pnpm --filter @agent-wechat/shared build
+          pnpm --filter @agent-wechat/desktop test
+      - name: Build and smoke-test the native hub
+        run: |
+          cargo build --release --locked --manifest-path packages/native-client-rust/Cargo.toml --target "$TARGET" -p wx-native
+          python3 packages/native-client-rust/scripts/smoke.py "packages/native-client-rust/target/$TARGET/release/wx"
+          pnpm --filter @agent-wechat/desktop prepare:sidecars --target "$TARGET"
+      - name: Give repeated builds of the same version increasing RPM releases
+        env:
+          RPM_RELEASE: ${{ github.run_number }}.${{ github.run_attempt }}.fc45
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const config = JSON.parse(readFileSync('packages/desktop/src-tauri/tauri.fedora.conf.json'));
+          config.bundle.linux.rpm.release = process.env.RPM_RELEASE;
+          writeFileSync(`${process.env.RUNNER_TEMP}/fedora-rpm.json`, JSON.stringify(config));
+          JS
+      - name: Build only the Fedora RPM
+        run: |
+          pnpm --filter @agent-wechat/desktop app:build --target "$TARGET" --bundles rpm --config "$RUNNER_TEMP/fedora-rpm.json"
+          cargo test --release --locked --manifest-path packages/desktop/src-tauri/Cargo.toml --target "$TARGET"
+      - name: Validate package layout, architecture and executables
+        run: |
+          packages=(packages/desktop/src-tauri/target/"$TARGET"/release/bundle/rpm/*.rpm)
+          test "${#packages[@]}" -eq 1
+          node packages/desktop/test/validate-rpm.mjs "${packages[0]}"
+          dnf install -y "${packages[0]}"
+          rpm -V agent-wechat
+          desktop-file-validate /usr/share/applications/AgentWechat.desktop
+      - name: Stage RPM, checksum and build identity
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+          BUILD_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          mkdir -p artifacts/fedora-rpm
+          cp packages/desktop/src-tauri/target/"$TARGET"/release/bundle/rpm/*.rpm artifacts/fedora-rpm/
+          cd artifacts/fedora-rpm
+          sha256sum ./*.rpm > SHA256SUMS
+          printf 'Source commit: %s\nBuild: %s\nTarget: Fedora 45 aarch64\n' "$SOURCE_COMMIT" "$BUILD_URL" > BUILD.txt
+          {
+            echo '### Fedora 45 ARM64 RPM'
+            echo 'Download the artifact below and extract it, then run:'
+            echo '```sh'
+            echo 'sha256sum -c SHA256SUMS'
+            echo 'sudo dnf install ./AgentWechat-*.aarch64.rpm'
+            echo '```'
+            echo 'Unsigned personal build. Updates use DNF; the upstream in-app updater is not supported for this RPM.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: AgentWechat-fedora45-aarch64-${{ github.run_number }}-${{ github.run_attempt }}
+          path: artifacts/fedora-rpm/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0

@@ -11,6 +11,49 @@ The native/npm release process publishes these artifacts:
 4. Rust libraries on crates.io: `wechat-protocol`, `wechat-profile`, `wechat-calls`
    and their required `wechat-media` and `wechat-platform` dependencies
 
+## Personal Fedora ARM64 RPM
+
+The fork's **Fedora ARM64 RPM** workflow (`fedora-rpm.yml`) is manual and builds
+only a Fedora 45 `aarch64` RPM. It does not invoke the upstream release workflow,
+publish a release, or need signing secrets. Keep inherited release and scheduled
+workflows disabled in a personal fork. The workflow file must be on the fork's
+default branch before GitHub allows manual runs.
+
+After syncing upstream into your fork, run it from **Actions → Fedora ARM64 RPM
+→ Run workflow**, or use:
+
+```bash
+gh workflow run fedora-rpm.yml --repo OWNER/agent-wechat --ref main
+```
+
+The job builds the default native feature set and desktop in a Fedora 45
+container on a native ARM64 runner, using the repository's Node, pnpm and Rust
+versions. Rust caches speed up later builds. It runs the existing hub smoke
+test and desktop tests, verifies the RPM's ARM64 executables and private media
+helpers, and installs the RPM in the disposable build container. This does not
+establish real WeChat login or media compatibility.
+
+Download the run's `AgentWechat-fedora45-aarch64-*` artifact and extract the ZIP
+GitHub provides. It contains the RPM, `SHA256SUMS`, and `BUILD.txt` identifying
+the source commit and run. Artifacts expire after 30 days; save downloads you
+want to keep. With AgentWechat quit, install or upgrade:
+
+```bash
+sha256sum -c SHA256SUMS
+sudo dnf install ./AgentWechat-*.aarch64.rpm
+```
+
+Each run increments the RPM release, including rebuilds of the same upstream
+version. These personal RPMs are unsigned. They use the existing application ID,
+so profiles, settings and keyring entries remain separate from package files.
+When moving from a manual per-user installation, remove its old launcher and
+command symlink after verifying the RPM, so they do not open the old copy.
+
+Update through downloaded RPMs. The upstream in-app updater is not supported
+for these fork packages; turn off its automatic checks in **Settings → App
+updates**. This packaging change adds no data migration. Removing the RPM with
+`sudo dnf remove agent-wechat` leaves user profiles and credentials in place.
+
 ## Prepare A Release
 
 1. Add changelog entries:
