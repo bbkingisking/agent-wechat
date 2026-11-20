@@ -34,7 +34,8 @@ jobs:
             openssl-devel gtk3-devel webkit2gtk4.1-devel libappindicator-gtk3-devel \
             librsvg2-devel dbus-devel pulseaudio-libs-devel \
             rpm-build cpio findutils tar gzip unzip xz python3 desktop-file-utils \
-            gnome-keyring libsecret xorg-x11-server-Xvfb python3-dbus python3-gobject
+            gnome-keyring libsecret dbus-daemon dbus-tools \
+            xorg-x11-server-Xvfb python3-dbus python3-gobject
       - uses: actions/checkout@v7
       - name: Trust the runner-mounted checkout inside this container
         # Tests spawn tools with different HOME directories; keep this exact
