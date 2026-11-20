@@ -59,4 +59,10 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_Wind
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3.6.3", features = ["sync-secret-service", "crypto-rust"] }
+tray-icon = { version = "0.25.1", default-features = false }
+
+# Temporary compatibility backport of tray-icon PR #404. Remove this override
+# once Tauri accepts a released tray-icon version containing set_status.
+[patch.crates-io]
+tray-icon = { git = "https://github.com/bbkingisking/tray-icon", rev = "1a3db3c57948ae7f7939244057f9d6df92601719" }
 
