@@ -10,6 +10,8 @@ mod macos_notifications;
 mod notification_sound;
 mod notifications;
 mod transport;
+#[cfg(target_os = "linux")]
+mod tray_attention;
 mod updates;
 
 use anyhow::{bail, Context, Result};
@@ -64,6 +66,8 @@ pub struct Desktop {
 /// How long an ending app waits for its hub to stop.
 #[cfg(unix)]
 const EXIT_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+/// Stable native tray identifier, shared with the Linux attention listener.
+const TRAY_ID: &str = "main";
 /// Whether this device's hub should run: while "This device" is selected, or
 /// while another hub is selected if the user chose to keep it running.
 fn local_wanted(config: &Config) -> bool {
@@ -823,7 +827,7 @@ fn main() {
             });
             // Menu events from the tray and the app menu share one handler.
             app.on_menu_event(menu_event);
-            tauri::tray::TrayIconBuilder::new()
+            tauri::tray::TrayIconBuilder::with_id(TRAY_ID)
                 .icon(
                     app.default_window_icon()
                         .context("Missing app icon")?
@@ -831,6 +835,8 @@ fn main() {
                 )
                 .menu(&menu)
                 .build(app)?;
+            #[cfg(target_os = "linux")]
+            tray_attention::start(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| {

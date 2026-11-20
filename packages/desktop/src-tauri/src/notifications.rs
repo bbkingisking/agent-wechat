@@ -109,7 +109,7 @@ impl Ledger {
         Ok(true)
     }
 }
-fn api(active: &Active, segments: &[&str]) -> Result<reqwest::Url> {
+pub(super) fn api(active: &Active, segments: &[&str]) -> Result<reqwest::Url> {
     let mut url = reqwest::Url::parse(&active.connection.endpoint)?;
     url.path_segments_mut()
         .map_err(|_| anyhow::anyhow!("Invalid hub address"))?
@@ -117,7 +117,7 @@ fn api(active: &Active, segments: &[&str]) -> Result<reqwest::Url> {
         .extend(segments.iter().copied());
     Ok(url)
 }
-async fn response(active: &Active, url: reqwest::Url) -> Result<reqwest::Response> {
+pub(super) async fn response(active: &Active, url: reqwest::Url) -> Result<reqwest::Response> {
     let response = tokio::time::timeout(
         Duration::from_secs(15),
         active.http.get(url).bearer_auth(active.key.as_str()).send(),
@@ -125,7 +125,7 @@ async fn response(active: &Active, url: reqwest::Url) -> Result<reqwest::Respons
     .await??;
     Ok(response)
 }
-async fn get(active: &Active, url: reqwest::Url) -> Result<Value> {
+pub(super) async fn get(active: &Active, url: reqwest::Url) -> Result<Value> {
     tokio::time::timeout(Duration::from_secs(15), async {
         let mut response = response(active, url).await?.error_for_status()?;
         let mut bytes = Vec::new();
@@ -140,7 +140,7 @@ async fn get(active: &Active, url: reqwest::Url) -> Result<Value> {
     })
     .await?
 }
-fn field<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
+pub(super) fn field<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
     let value = value[key]
         .as_str()
         .context("Missing notification identity")?;
@@ -652,12 +652,12 @@ async fn alert(
     Ok(())
 }
 #[derive(Default)]
-struct Frames {
+pub(super) struct Frames {
     pending: Vec<u8>,
     data: Vec<u8>,
 }
 impl Frames {
-    fn push(&mut self, chunk: &[u8]) -> Result<Vec<Value>> {
+    pub(super) fn push(&mut self, chunk: &[u8]) -> Result<Vec<Value>> {
         ensure!(
             self.pending.len() + chunk.len() <= 1024 * 1024,
             "Notification stream frame exceeds limit"

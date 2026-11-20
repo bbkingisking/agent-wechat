@@ -56,6 +56,21 @@ for these fork packages; turn off its automatic checks in **Settings → App
 updates**. This packaging change adds no data migration. Removing the RPM with
 `sudo dnf remove agent-wechat` leaves user profiles and credentials in place.
 
+### Temporary Linux tray dependency
+
+The desktop manifest pins a `tray-icon` 0.25.1 compatibility backport of
+[tray-icon PR #404](https://github.com/tauri-apps/tray-icon/pull/404) with
+`[patch.crates-io]`. The full Git revision and desktop lockfile make CI builds
+use the tested source. The upstream PR branch is separate from this backport.
+
+Keep the dependency override and unread-attention behaviour in separate commits.
+After Tauri accepts a released crate containing the status API, remove the
+override, align the direct Linux `tray-icon` dependency with Tauri's version and
+regenerate the desktop lockfile. The adapter is confined to `tray_attention.rs`.
+If upstream AgentWechat adopts the feature, drop the behaviour commit during
+the next rebase. There are no migrations or new saved unread records to undo;
+the indicator keeps only an account-level boolean in memory.
+
 ## Prepare A Release
 
 1. Add changelog entries:

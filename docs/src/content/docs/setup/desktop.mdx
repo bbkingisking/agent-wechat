@@ -73,6 +73,11 @@ The browser version gives each view its own address, so reload, Back and bookmar
 
 ## Message notifications
 
+On Linux, the tray requests attention when a signed-in account on the selected
+hub has unread messages in an unmuted chat. It returns to normal when those
+messages are read. This works while the window is hidden and independently of
+popup notification settings. Your panel controls how attention is displayed.
+
 Clicking a message notification opens its chat at that message. On macOS:
 
 - Notification Center groups notifications by chat, and opening a chat in the app clears its notifications.
@@ -83,5 +88,5 @@ Clicking a message notification opens its chat at that message. On macOS:
 If no notifications appear, allow AgentWechat in **System Settings → Notifications**.
 
 <Aside title="Good to know">
-Quitting does not sign out of WeChat or delete profiles. Linux desktops need an unlocked Secret Service keyring. A separately installed CLI does not read the desktop keyring; export a key for it or create a separate [API token](/reference/tokens/).
+Quitting does not sign out of WeChat or delete profiles. Linux desktops need an unlocked Secret Service keyring. If profile data is temporarily unavailable, the tray keeps its last confirmed unread status. A separately installed CLI does not read the desktop keyring; export a key for it or create a separate [API token](/reference/tokens/).
 </Aside>
