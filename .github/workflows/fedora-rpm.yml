@@ -33,6 +33,10 @@ jobs:
             librsvg2-devel dbus-devel pulseaudio-libs-devel \
             rpm-build cpio findutils tar gzip unzip xz python3 desktop-file-utils
       - uses: actions/checkout@v7
+      - name: Trust the runner-mounted checkout inside this container
+        # Tests spawn tools with different HOME directories; keep this exact
+        # mount trusted in the disposable container's system Git configuration.
+        run: git config --system --add safe.directory "$GITHUB_WORKSPACE"
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
