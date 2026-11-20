@@ -14,8 +14,9 @@ The native/npm release process publishes these artifacts:
 ## Personal Fedora ARM64 RPM
 
 The fork's **Fedora ARM64 RPM** workflow (`fedora-rpm.yml`) is manual and builds
-only a Fedora 45 `aarch64` RPM. It does not invoke the upstream release workflow,
-publish a release, or need signing secrets. Keep inherited release and scheduled
+only a Fedora 45 `aarch64` RPM. After validation, a separate publishing job creates
+a GitHub Release with the RPM, checksum and build identity. It does not invoke
+the upstream release workflow or need signing secrets. Keep inherited release and scheduled
 workflows disabled in a personal fork. The workflow file must be on the fork's
 default branch before GitHub allows manual runs.
 
@@ -33,10 +34,11 @@ test and desktop tests, verifies the RPM's ARM64 executables and private media
 helpers, and installs the RPM in the disposable build container. This does not
 establish real WeChat login or media compatibility.
 
-Download the run's `AgentWechat-fedora45-aarch64-*` artifact and extract the ZIP
-GitHub provides. It contains the RPM, `SHA256SUMS`, and `BUILD.txt` identifying
-the source commit and run. Artifacts expire after 30 days; save downloads you
-want to keep. With AgentWechat quit, install or upgrade:
+Open the fork's **Releases** page and download the RPM, `SHA256SUMS`, and
+`BUILD.txt` from the desired Fedora release. Each release uses a unique tag,
+`fedora45-aarch64-RUN.ATTEMPT`, pointing to its exact source commit. The files
+remain available until the release or assets are deleted. A run artifact is also
+kept for 30 days. With AgentWechat quit, install or upgrade:
 
 ```bash
 sha256sum -c SHA256SUMS

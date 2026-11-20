@@ -1,6 +1,6 @@
 name: Fedora ARM64 RPM
 
-# Personal fork builds only: no upstream release workflow or publishing secrets.
+# Personal fork builds only: no upstream release workflow or signing secrets.
 on:
   workflow_dispatch:
 
@@ -14,6 +14,8 @@ concurrency:
 jobs:
   rpm:
     name: Build and validate Fedora 45 ARM64 RPM
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
     container: fedora:45
@@ -109,9 +111,91 @@ jobs:
             echo 'Unsigned personal build. Updates use DNF; the upstream in-app updater is not supported for this RPM.'
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
+        id: upload
         with:
           name: AgentWechat-fedora45-aarch64-${{ github.run_number }}-${{ github.run_attempt }}
           path: artifacts/fedora-rpm/
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
+
+  publish:
+    name: Publish Fedora RPM release
+    needs: rpm
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.rpm.outputs.artifact-id }}
+          path: release
+          merge-multiple: true
+      - name: Publish the validated files as a GitHub Release
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const directory = 'release';
+            const files = fs.readdirSync(directory).sort();
+            const rpms = files.filter(name => /^AgentWechat-.*\.aarch64\.rpm$/.test(name));
+            if (rpms.length !== 1 || files.length !== 3 || !files.includes('SHA256SUMS') || !files.includes('BUILD.txt')) {
+              throw new Error('Expected exactly one validated RPM, SHA256SUMS and BUILD.txt');
+            }
+            const identity = fs.readFileSync(path.join(directory, 'BUILD.txt'), 'utf8');
+            if (!identity.includes(`Source commit: ${context.sha}\n`)) throw new Error('Artifact source commit mismatch');
+            const checksum = fs.readFileSync(path.join(directory, 'SHA256SUMS'), 'utf8').trim();
+            const bytes = fs.readFileSync(path.join(directory, rpms[0]));
+            const digest = require('node:crypto').createHash('sha256').update(bytes).digest('hex');
+            if (checksum !== `${digest}  ./${rpms[0]}`) throw new Error('RPM checksum mismatch');
+            // A retry of only this job reuses the successful build's artifact.
+            const match = rpms[0].match(/-(\d+)\.(\d+)\.fc45\.aarch64\.rpm$/);
+            if (!match || match[1] !== String(context.runNumber)) throw new Error('Unexpected RPM build identity');
+            const build = `${match[1]}.${match[2]}`;
+            const tag = `fedora45-aarch64-${build}`;
+            const body = [
+              'Personal Fedora 45 ARM64 build. The RPM is unsigned.',
+              '',
+              'Download the RPM and SHA256SUMS into the same folder, quit AgentWechat, then:',
+              '```sh',
+              'sha256sum -c SHA256SUMS',
+              `sudo dnf install ./${rpms[0]}`,
+              '```',
+              '',
+              'Use downloaded RPMs for updates; the upstream in-app updater is not supported for these fork builds.',
+              '',
+              identity.trim(),
+            ].join('\n');
+            // Publish only after every asset has uploaded; failed uploads leave a draft.
+            let release;
+            try {
+              ({data: release} = await github.rest.repos.getReleaseByTag({...context.repo, tag}));
+              if (release.target_commitish !== context.sha) throw new Error('Release source commit mismatch');
+              if (!release.draft) {
+                await core.summary.addLink('Download the Fedora RPM release', release.html_url).write();
+                return;
+              }
+              for (const asset of release.assets) {
+                await github.rest.repos.deleteReleaseAsset({...context.repo, asset_id: asset.id});
+              }
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              ({data: release} = await github.rest.repos.createRelease({
+                ...context.repo, tag_name: tag, target_commitish: context.sha,
+                name: `AgentWechat — Fedora 45 ARM64 (build ${build})`,
+                body, draft: true, prerelease: false,
+              }));
+            }
+            for (const name of files) {
+              await github.rest.repos.uploadReleaseAsset({
+                ...context.repo, release_id: release.id, name,
+                headers: {'content-type': 'application/octet-stream'},
+                data: fs.readFileSync(path.join(directory, name)),
+              });
+            }
+            const {data: published} = await github.rest.repos.updateRelease({
+              ...context.repo, release_id: release.id, draft: false, make_latest: 'true',
+            });
+            await core.summary.addLink('Download the Fedora RPM release', published.html_url).write();
